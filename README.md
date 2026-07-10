@@ -198,12 +198,12 @@ MAX_CONCURRENT_JOBS=1
 MAX_QUEUED_JOBS=5
 TEMP_DIRECTORY=/tmp/tiktok-compressor
 JOB_TIMEOUT_SECONDS=600
-RATE_LIMIT_REQUESTS=60
+RATE_LIMIT_REQUESTS=200
 RATE_LIMIT_WINDOW_MINUTES=15
 FFMPEG_THREADS=1
 ```
 
-In Coolify, set these as environment variables. Keep `MAX_CONCURRENT_JOBS=1` on a small VPS so only one FFmpeg compression runs at a time. `MAX_QUEUED_JOBS` controls how many compression requests may wait instead of getting a busy error. If you see rate-limit messages while testing, increase `RATE_LIMIT_REQUESTS`; only `/api` requests are counted.
+In Coolify, set these as environment variables. Keep `MAX_CONCURRENT_JOBS=1` on a small VPS so only one FFmpeg compression runs at a time. `MAX_QUEUED_JOBS` controls how many compression requests may wait instead of getting a busy error. If you see rate-limit messages while testing, increase `RATE_LIMIT_REQUESTS`; live progress and final download routes are skipped by the limiter.
 
 ## API
 

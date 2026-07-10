@@ -25,6 +25,12 @@ app.use(
     limit: config.rateLimitRequests,
     standardHeaders: "draft-7",
     legacyHeaders: false,
+    skip: (req) =>
+      req.method === "GET" &&
+      (/^\/api\/video\/jobs\/[^/]+\/events$/.test(req.path) ||
+        /^\/api\/video\/jobs\/[^/]+\/download$/.test(req.path) ||
+        /^\/api\/video\/original-jobs\/[^/]+\/events$/.test(req.path) ||
+        /^\/api\/video\/original-jobs\/[^/]+\/download$/.test(req.path)),
     message: {
       success: false,
       error: {
