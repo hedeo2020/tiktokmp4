@@ -3,6 +3,7 @@ const urlInput = document.querySelector("#url");
 const modeInput = document.querySelector("#mode");
 const sizeInput = document.querySelector("#size");
 const downloadButton = document.querySelector("#download");
+const originalButton = document.querySelector("#download-original");
 const result = document.querySelector("#result");
 const statusBox = document.querySelector("#status");
 const errorBox = document.querySelector("#error");
@@ -52,6 +53,7 @@ form.addEventListener("submit", async (event) => {
   clearMessages();
   result.hidden = true;
   downloadButton.disabled = true;
+  originalButton.disabled = true;
   showStatus("Fetching metadata");
 
   try {
@@ -72,6 +74,7 @@ form.addEventListener("submit", async (event) => {
     warning.textContent = payload.video.warning || "";
     result.hidden = false;
     downloadButton.disabled = false;
+    originalButton.disabled = false;
     showStatus("Ready to compress");
   } catch (error) {
     showError(error.message);
@@ -82,6 +85,52 @@ modeInput.addEventListener("change", () => {
   if (modeInput.value === "keep-1080p") {
     warning.hidden = false;
     warning.textContent = "Keeping 1080p at very small file sizes may produce visible compression artifacts.";
+  }
+});
+
+async function downloadBlobFromEndpoint(endpoint, body, fallbackFilename, failureMessage) {
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body)
+  });
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => undefined);
+    throw new Error(payload?.error?.message || failureMessage);
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get("content-disposition") || "";
+  const match = disposition.match(/filename="([^"]+)"/);
+  const filename = match?.[1] || fallbackFilename;
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(objectUrl);
+}
+
+originalButton.addEventListener("click", async () => {
+  clearMessages();
+  originalButton.disabled = true;
+
+  try {
+    showStatus("Fetching original HD source");
+    await downloadBlobFromEndpoint(
+      "/api/video/original",
+      { url: analyzedUrl || urlInput.value },
+      "tiktok-original-hd.mp4",
+      "Original HD download failed."
+    );
+    showStatus("Original HD download ready");
+  } catch (error) {
+    showError(error.message);
+  } finally {
+    originalButton.disabled = false;
   }
 });
 
@@ -96,34 +145,16 @@ downloadButton.addEventListener("click", async () => {
     await new Promise((resolve) => setTimeout(resolve, 200));
     showStatus("Compressing video");
 
-    const response = await fetch("/api/video/download", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
+    await downloadBlobFromEndpoint(
+      "/api/video/download",
+      {
         url: analyzedUrl || urlInput.value,
         mode: modeInput.value,
         sizePer20SecondsMb: Number(sizeInput.value)
-      })
-    });
-
-    if (!response.ok) {
-      const payload = await response.json().catch(() => undefined);
-      throw new Error(payload?.error?.message || "Compression failed.");
-    }
-
-    showStatus("Preparing download");
-    const blob = await response.blob();
-    const disposition = response.headers.get("content-disposition") || "";
-    const match = disposition.match(/filename="([^"]+)"/);
-    const filename = match?.[1] || "tiktok-compressed.mp4";
-    const objectUrl = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = objectUrl;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(objectUrl);
+      },
+      "tiktok-compressed.mp4",
+      "Compression failed."
+    );
     showStatus("Download ready");
   } catch (error) {
     showError(error.message);

@@ -228,3 +228,13 @@ Supported modes:
 
 - `adaptive`
 - `keep-1080p`
+
+### `POST /api/video/original`
+
+Downloads the original HD MP4 through the backend without exposing the HD source URL to the browser.
+
+```json
+{
+  "url": "https://www.tiktok.com/@user/video/123"
+}
+```

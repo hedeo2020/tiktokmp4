@@ -126,6 +126,12 @@ button[disabled] {
   color: white;
 }
 
+button.secondary {
+  border: 1px solid var(--line);
+  background: var(--panel-soft);
+  color: var(--text);
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;

@@ -35,6 +35,15 @@ function releaseJobSlot(): void {
   activeJobs = Math.max(0, activeJobs - 1);
 }
 
+async function streamMp4File(res: express.Response, filePath: string): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const stream = fs.createReadStream(filePath);
+    stream.on("error", reject);
+    stream.on("end", resolve);
+    stream.pipe(res);
+  });
+}
+
 videoRouter.post("/info", async (req, res) => {
   try {
     const url = validateTikTokUrl(req.body?.url);
@@ -59,6 +68,45 @@ videoRouter.post("/info", async (req, res) => {
     });
   } catch (error) {
     sendError(res, error);
+  }
+});
+
+videoRouter.post("/original", async (req, res) => {
+  if (!acquireJobSlot()) {
+    sendError(res, new AppError("SERVER_BUSY", "The server is busy. Please try again soon.", 429));
+    return;
+  }
+
+  const controller = new AbortController();
+  const abortIfDisconnected = () => {
+    if (!res.writableEnded) controller.abort();
+  };
+  res.on("close", abortIfDisconnected);
+
+  let jobDirectory: string | undefined;
+  try {
+    const url = validateTikTokUrl(req.body?.url);
+    const video = await fetchTikwmVideo(url, controller.signal);
+
+    jobDirectory = await createJobDirectory(config.tempDirectory);
+    const sourcePath = temporaryVideoPath(jobDirectory);
+
+    await downloadVideo(video.hdplay, sourcePath, controller.signal);
+    const stat = await fsp.stat(sourcePath);
+    const filename = `tiktok-${sanitizeFilenamePart(video.id)}-original-hd.mp4`;
+
+    res.setHeader("Content-Type", "video/mp4");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("Content-Length", String(stat.size));
+    res.setHeader("Cache-Control", "no-store");
+
+    await streamMp4File(res, sourcePath);
+  } catch (error) {
+    sendError(res, error);
+  } finally {
+    res.off("close", abortIfDisconnected);
+    releaseJobSlot();
+    if (jobDirectory) await removeDirectoryQuietly(jobDirectory);
   }
 });
 
@@ -102,12 +150,7 @@ videoRouter.post("/download", async (req, res) => {
     res.setHeader("Content-Length", String(stat.size));
     res.setHeader("Cache-Control", "no-store");
 
-    await new Promise<void>((resolve, reject) => {
-      const stream = fs.createReadStream(outputPath);
-      stream.on("error", reject);
-      stream.on("end", resolve);
-      stream.pipe(res);
-    });
+    await streamMp4File(res, outputPath);
   } catch (error) {
     sendError(res, error);
   } finally {
