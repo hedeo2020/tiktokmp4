@@ -65,6 +65,21 @@ function startProcessingProgress() {
   }, 900);
 }
 
+function startOriginalDownloadProgress() {
+  stopProgress();
+  let percent = 10;
+  setProgress(percent, "Preparing original HD download");
+  progressTimer = window.setInterval(() => {
+    if (percent < 88) {
+      percent += 4;
+      setProgress(percent, "Downloading original HD source");
+      return;
+    }
+
+    setProgress(percent, "Finalizing download");
+  }, 700);
+}
+
 function stopProgress() {
   if (progressTimer) {
     window.clearInterval(progressTimer);
@@ -124,8 +139,10 @@ form.addEventListener("submit", async (event) => {
       calculateQualityTargetBytes(payload.video.duration, Number(sizeInput.value))
     );
 
-    warning.hidden = !payload.video.warning;
-    warning.textContent = payload.video.warning || "";
+    warning.hidden = false;
+    warning.textContent =
+      payload.video.warning ||
+      "The target size is very small, so 1080p compression may show visible artifacts.";
     result.hidden = false;
     downloadButton.disabled = false;
     downloadButton.hidden = false;
@@ -184,14 +201,18 @@ originalButton.addEventListener("click", async () => {
 
   try {
     showStatus("Fetching original HD source");
+    startOriginalDownloadProgress();
     await downloadBlobFromEndpoint(
       "/api/video/original",
       { url: analyzedUrl || urlInput.value },
       "tiktok-original-hd.mp4",
       "Original HD download failed."
     );
+    stopProgress();
+    setProgress(100, "Original HD download ready");
     showStatus("Original HD download ready");
   } catch (error) {
+    stopProgress();
     showError(error.message);
   } finally {
     originalButton.disabled = false;
