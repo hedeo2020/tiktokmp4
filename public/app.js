@@ -191,6 +191,68 @@ async function downloadBlobFromEndpoint(endpoint, body, fallbackFilename, failur
   URL.revokeObjectURL(objectUrl);
 }
 
+async function downloadBlobFromUrl(endpoint, fallbackFilename, failureMessage) {
+  const response = await fetch(endpoint);
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => undefined);
+    throw new Error(payload?.error?.message || failureMessage);
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get("content-disposition") || "";
+  const match = disposition.match(/filename="([^"]+)"/);
+  const filename = match?.[1] || fallbackFilename;
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(objectUrl);
+}
+
+async function startCompressionJob() {
+  const payload = await fetch("/api/video/jobs", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      url: analyzedUrl || urlInput.value,
+      mode: modeInput.value,
+      sizePer20SecondsMb: Number(sizeInput.value)
+    })
+  }).then(readJsonResponse);
+
+  return payload.job.id;
+}
+
+async function waitForCompressionJob(jobId) {
+  return await new Promise((resolve, reject) => {
+    const events = new EventSource(`/api/video/jobs/${encodeURIComponent(jobId)}/events`);
+
+    events.onmessage = (event) => {
+      const job = JSON.parse(event.data);
+      setProgress(job.percent, job.message);
+
+      if (job.status === "done") {
+        events.close();
+        resolve();
+      }
+
+      if (job.status === "error") {
+        events.close();
+        reject(new Error(job.error?.message || "Compression failed."));
+      }
+    };
+
+    events.onerror = () => {
+      events.close();
+      reject(new Error("Lost connection to compression progress."));
+    };
+  });
+}
+
 originalButton.addEventListener("click", async () => {
   clearMessages();
   originalButton.disabled = true;
@@ -220,24 +282,18 @@ downloadButton.addEventListener("click", async () => {
   downloadButton.disabled = true;
 
   try {
-    showStatus("Processing your compressed download");
-    startProcessingProgress();
-
-    await downloadBlobFromEndpoint(
-      "/api/video/download",
-      {
-        url: analyzedUrl || urlInput.value,
-        mode: modeInput.value,
-        sizePer20SecondsMb: Number(sizeInput.value)
-      },
+    showStatus("Starting compression job");
+    setProgress(1, "Starting compression job");
+    const jobId = await startCompressionJob();
+    await waitForCompressionJob(jobId);
+    await downloadBlobFromUrl(
+      `/api/video/jobs/${encodeURIComponent(jobId)}/download`,
       "tiktok-compressed.mp4",
       "Compression failed."
     );
-    stopProgress();
     setProgress(100, "Download ready");
     showStatus("Download ready");
   } catch (error) {
-    stopProgress();
     showError(error.message);
   } finally {
     downloadButton.disabled = false;

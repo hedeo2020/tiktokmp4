@@ -63,7 +63,7 @@ async function assertPublicHttpsUrl(rawUrl: string): Promise<URL> {
   return parsed;
 }
 
-export async function downloadVideo(sourceUrl: string, destinationPath: string, signal: AbortSignal): Promise<number> {
+export async function downloadVideo(sourceUrl: string, destinationPath: string, signal: AbortSignal, onProgress?: (downloadedBytes: number, totalBytes?: number) => void): Promise<number> {
   let currentUrl = await assertPublicHttpsUrl(sourceUrl);
   const maxBytes = config.maxSourceSizeMb * 1024 * 1024;
 
@@ -107,6 +107,7 @@ export async function downloadVideo(sourceUrl: string, destinationPath: string, 
     const source = Readable.fromWeb(response.body as never);
     source.on("data", (chunk: Buffer) => {
       downloadedBytes += chunk.length;
+      onProgress?.(downloadedBytes, Number.isFinite(contentLength) ? contentLength : undefined);
       if (downloadedBytes > maxBytes) {
         source.destroy(new AppError("SOURCE_TOO_LARGE", "The HD source video is too large.", 413));
       }

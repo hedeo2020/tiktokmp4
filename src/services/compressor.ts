@@ -24,6 +24,8 @@ export interface EncodingSettings {
   maxHeight: number;
 }
 
+export type ProgressCallback = (percent: number, message: string) => void;
+
 export function calculateEncodingSettings(
   durationSeconds: number,
   sizePer20SecondsMb = 1
@@ -63,7 +65,13 @@ export function buildScaleFilter(mode: "adaptive" | "keep-1080p", sourceHeight: 
   return `scale='if(gt(ih,${targetHeight}),-2,iw)':'if(gt(ih,${targetHeight}),${targetHeight},ih)'`;
 }
 
-async function runProcess(command: string, args: string[], signal: AbortSignal, timeoutMs: number): Promise<string> {
+function secondsFromFfmpegTime(value: string): number {
+  const match = value.match(/(\d+):(\d+):(\d+(?:\.\d+)?)/);
+  if (!match) return 0;
+  return Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]);
+}
+
+async function runProcess(command: string, args: string[], signal: AbortSignal, timeoutMs: number, onStderr?: (chunk: string) => void): Promise<string> {
   return await new Promise((resolve, reject) => {
     const child = spawn(command, args, { stdio: ["ignore", "ignore", "pipe"] });
     let stderr = "";
@@ -81,6 +89,7 @@ async function runProcess(command: string, args: string[], signal: AbortSignal, 
     child.stderr.setEncoding("utf8");
     child.stderr.on("data", (chunk: string) => {
       stderr = (stderr + chunk).slice(-8000);
+      onStderr?.(chunk);
     });
     child.on("error", (error) => {
       clearTimeout(timeout);
@@ -153,7 +162,7 @@ export async function probeVideo(inputPath: string, signal: AbortSignal): Promis
   }
 }
 
-async function encodeTwoPass(inputPath: string, outputPath: string, passLogPath: string, scaleFilter: string, settings: Omit<EncodingSettings, "maxHeight">, signal: AbortSignal): Promise<void> {
+async function encodeTwoPass(inputPath: string, outputPath: string, passLogPath: string, scaleFilter: string, settings: Omit<EncodingSettings, "maxHeight">, signal: AbortSignal, durationSeconds: number, onProgress?: ProgressCallback): Promise<void> {
   const videoBitrate = `${Math.floor(settings.videoBitrateBps / 1000)}k`;
   const audioBitrate = `${Math.floor(settings.audioBitrateBps / 1000)}k`;
   const bufsize = `${Math.floor((settings.videoBitrateBps * 2) / 1000)}k`;
@@ -186,7 +195,14 @@ async function encodeTwoPass(inputPath: string, outputPath: string, passLogPath:
     "ffmpeg",
     ["-y", "-i", inputPath, ...commonVideoArgs, "-pass", "1", "-passlogfile", passLogPath, "-an", "-f", "mp4", nullOutputPath()],
     signal,
-    timeoutMs
+    timeoutMs,
+    (chunk) => {
+      const timeMatch = chunk.match(/time=(\d+:\d+:\d+(?:\.\d+)?)/);
+      if (timeMatch) {
+        const passProgress = Math.min(secondsFromFfmpegTime(timeMatch[1]) / durationSeconds, 1);
+        onProgress?.(35 + passProgress * 25, "Analyzing video bitrate");
+      }
+    }
   ).catch((error) => {
     if (error instanceof AppError) throw error;
     throw new AppError("COMPRESSION_FAILED", "Video compression failed.");
@@ -218,28 +234,36 @@ async function encodeTwoPass(inputPath: string, outputPath: string, passLogPath:
       outputPath
     ],
     signal,
-    timeoutMs
+    timeoutMs,
+    (chunk) => {
+      const timeMatch = chunk.match(/time=(\d+:\d+:\d+(?:\.\d+)?)/);
+      if (timeMatch) {
+        const passProgress = Math.min(secondsFromFfmpegTime(timeMatch[1]) / durationSeconds, 1);
+        onProgress?.(60 + passProgress * 32, "Compressing video");
+      }
+    }
   ).catch((error) => {
     if (error instanceof AppError) throw error;
     throw new AppError("COMPRESSION_FAILED", "Video compression failed.");
   });
 }
 
-export async function compressVideo(inputPath: string, outputPath: string, jobDirectory: string, mode: "adaptive" | "keep-1080p", probe: ProbeInfo, sizePer20SecondsMb: number, signal: AbortSignal): Promise<EncodingSettings> {
+export async function compressVideo(inputPath: string, outputPath: string, jobDirectory: string, mode: "adaptive" | "keep-1080p", probe: ProbeInfo, sizePer20SecondsMb: number, signal: AbortSignal, onProgress?: ProgressCallback): Promise<EncodingSettings> {
   let settings = calculateEncodingSettings(probe.durationSeconds, sizePer20SecondsMb);
   let scaleFilter = buildScaleFilter(mode, probe.height, settings.videoBitrateBps);
   const passLogPath = path.join(jobDirectory, "ffmpeg-pass");
 
-  await encodeTwoPass(inputPath, outputPath, passLogPath, scaleFilter, settings, signal);
+  await encodeTwoPass(inputPath, outputPath, passLogPath, scaleFilter, settings, signal, probe.durationSeconds, onProgress);
 
   const stat = await fs.stat(outputPath);
   if (stat.size > settings.targetBytes * 1.08) {
+    onProgress?.(92, "Refining compressed size");
     settings = {
       ...settings,
       videoBitrateBps: Math.max(120_000, Math.floor(settings.videoBitrateBps * (settings.targetBytes / stat.size)))
     };
     scaleFilter = buildScaleFilter(mode, probe.height, settings.videoBitrateBps);
-    await encodeTwoPass(inputPath, outputPath, passLogPath, scaleFilter, settings, signal);
+    await encodeTwoPass(inputPath, outputPath, passLogPath, scaleFilter, settings, signal, probe.durationSeconds, onProgress);
   }
 
   return { ...settings, maxHeight: mode === "keep-1080p" ? Math.min(probe.height, 1080) : chooseAdaptiveMaxHeight(settings.videoBitrateBps) };
