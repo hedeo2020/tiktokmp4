@@ -197,10 +197,12 @@ MAX_SOURCE_SIZE_MB=500
 MAX_CONCURRENT_JOBS=1
 TEMP_DIRECTORY=/tmp/tiktok-compressor
 JOB_TIMEOUT_SECONDS=600
-RATE_LIMIT_REQUESTS=10
+RATE_LIMIT_REQUESTS=60
 RATE_LIMIT_WINDOW_MINUTES=15
 FFMPEG_THREADS=1
 ```
+
+In Coolify, set these as environment variables. If you see rate-limit messages while testing, increase `RATE_LIMIT_REQUESTS`; only `/api` requests are counted.
 
 ## API
 
@@ -226,4 +228,3 @@ Supported modes:
 
 - `adaptive`
 - `keep-1080p`
-

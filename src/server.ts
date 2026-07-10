@@ -13,18 +13,27 @@ const publicDirectory = path.resolve(__dirname, "../public");
 
 const app = express();
 app.disable("x-powered-by");
+app.set("trust proxy", 1);
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json({ limit: "16kb" }));
+
+app.use(express.static(publicDirectory));
 app.use(
+  "/api",
   rateLimit({
     windowMs: config.rateLimitWindowMinutes * 60 * 1000,
     limit: config.rateLimitRequests,
     standardHeaders: "draft-7",
-    legacyHeaders: false
+    legacyHeaders: false,
+    message: {
+      success: false,
+      error: {
+        code: "RATE_LIMITED",
+        message: "Too many requests. Please wait a few minutes and try again."
+      }
+    }
   })
 );
-
-app.use(express.static(publicDirectory));
 app.use("/api/video", videoRouter);
 
 app.use((_req, res) => {

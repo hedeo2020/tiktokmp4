@@ -18,7 +18,7 @@ export const config = {
   tempDirectory:
     process.env.TEMP_DIRECTORY ?? path.join(process.cwd(), "temp"),
   jobTimeoutSeconds: numberFromEnv("JOB_TIMEOUT_SECONDS", 600),
-  rateLimitRequests: numberFromEnv("RATE_LIMIT_REQUESTS", 10),
+  rateLimitRequests: numberFromEnv("RATE_LIMIT_REQUESTS", 60),
   rateLimitWindowMinutes: numberFromEnv("RATE_LIMIT_WINDOW_MINUTES", 15),
   ffmpegThreads: numberFromEnv("FFMPEG_THREADS", 1)
 } as const;
