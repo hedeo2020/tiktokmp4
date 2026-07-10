@@ -1,0 +1,15 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "3000:3000"
+    volumes:
+      - tiktok-temp:/tmp/tiktok-compressor
+    mem_limit: 1g
+    cpus: 1.0
+
+volumes:
+  tiktok-temp:

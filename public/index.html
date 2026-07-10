@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TikTok HD Video Compressor</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="panel">
+        <div class="heading">
+          <p class="eyebrow">HD source, small MP4 output</p>
+          <h1>TikTok HD Video Compressor</h1>
+        </div>
+
+        <form id="video-form" class="form">
+          <label class="field">
+            <span>TikTok URL</span>
+            <input id="url" name="url" type="url" required placeholder="https://www.tiktok.com/@user/video/123" />
+          </label>
+
+          <div class="grid">
+            <label class="field">
+              <span>Compression mode</span>
+              <select id="mode" name="mode">
+                <option value="adaptive">Best quality under target size</option>
+                <option value="keep-1080p">Keep up to 1080p</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Target size</span>
+              <select id="size" name="size">
+                <option value="1">1 MB per 20 seconds</option>
+                <option value="2">2 MB per 20 seconds</option>
+                <option value="3">3 MB per 20 seconds</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="actions">
+            <button id="analyze" type="submit">Analyze</button>
+            <button id="download" type="button" disabled>Download and compress</button>
+          </div>
+        </form>
+
+        <div id="status" class="status" hidden></div>
+        <div id="error" class="error" hidden></div>
+
+        <section id="result" class="result" hidden>
+          <img id="cover" alt="" />
+          <div class="metadata">
+            <h2 id="title"></h2>
+            <dl>
+              <div><dt>Duration</dt><dd id="duration"></dd></div>
+              <div><dt>Original HD size</dt><dd id="source-size"></dd></div>
+              <div><dt>Estimated compressed size</dt><dd id="estimated-size"></dd></div>
+            </dl>
+            <p id="warning" class="warning" hidden></p>
+          </div>
+        </section>
+
+        <p class="notice">Download only videos you own or have permission to use. Respect copyright, privacy, and TikTok's terms.</p>
+      </section>
+    </main>
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
