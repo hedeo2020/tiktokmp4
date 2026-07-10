@@ -15,6 +15,7 @@ const progressBar = document.querySelector("#progress-bar");
 
 let analyzedUrl = "";
 let progressTimer = null;
+let analyzedDuration = 0;
 
 function showStatus(message) {
   statusBox.textContent = message;
@@ -83,6 +84,11 @@ function formatDuration(seconds) {
   return `${minutes}:${remaining}`;
 }
 
+function calculateQualityTargetBytes(durationSeconds, sizePer20SecondsMb) {
+  const mib = 1024 * 1024;
+  return Math.max(1, Math.ceil(durationSeconds / 20) * sizePer20SecondsMb) * mib;
+}
+
 async function readJsonResponse(response) {
   const payload = await response.json().catch(() => undefined);
   if (!response.ok || !payload?.success) {
@@ -96,7 +102,9 @@ form.addEventListener("submit", async (event) => {
   clearMessages();
   result.hidden = true;
   downloadButton.disabled = true;
+  downloadButton.hidden = true;
   originalButton.disabled = true;
+  originalButton.hidden = true;
   showStatus("Fetching metadata");
 
   try {
@@ -107,17 +115,22 @@ form.addEventListener("submit", async (event) => {
     }).then(readJsonResponse);
 
     analyzedUrl = urlInput.value;
+    analyzedDuration = payload.video.duration;
     document.querySelector("#cover").src = payload.video.cover || "";
     document.querySelector("#title").textContent = payload.video.title || "TikTok video";
     document.querySelector("#duration").textContent = formatDuration(payload.video.duration);
     document.querySelector("#source-size").textContent = formatBytes(payload.video.sourceSizeBytes);
-    document.querySelector("#estimated-size").textContent = formatBytes(payload.video.estimatedOutputSizeBytes);
+    document.querySelector("#estimated-size").textContent = formatBytes(
+      calculateQualityTargetBytes(payload.video.duration, Number(sizeInput.value))
+    );
 
     warning.hidden = !payload.video.warning;
     warning.textContent = payload.video.warning || "";
     result.hidden = false;
     downloadButton.disabled = false;
+    downloadButton.hidden = false;
     originalButton.disabled = false;
+    originalButton.hidden = false;
     showStatus("Ready to download or compress");
   } catch (error) {
     showError(error.message);
@@ -128,6 +141,14 @@ modeInput.addEventListener("change", () => {
   if (modeInput.value === "keep-1080p") {
     warning.hidden = false;
     warning.textContent = "Keeping 1080p at very small file sizes may produce visible compression artifacts.";
+  }
+});
+
+sizeInput.addEventListener("change", () => {
+  if (analyzedDuration > 0) {
+    document.querySelector("#estimated-size").textContent = formatBytes(
+      calculateQualityTargetBytes(analyzedDuration, Number(sizeInput.value))
+    );
   }
 });
 
