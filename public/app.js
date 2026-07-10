@@ -139,10 +139,8 @@ form.addEventListener("submit", async (event) => {
       calculateQualityTargetBytes(payload.video.duration, Number(sizeInput.value))
     );
 
-    warning.hidden = false;
-    warning.textContent =
-      payload.video.warning ||
-      "The target size is very small, so 1080p compression may show visible artifacts.";
+    warning.hidden = true;
+    warning.textContent = "";
     result.hidden = false;
     downloadButton.disabled = false;
     downloadButton.hidden = false;
@@ -155,10 +153,8 @@ form.addEventListener("submit", async (event) => {
 });
 
 modeInput.addEventListener("change", () => {
-  if (modeInput.value === "keep-1080p") {
-    warning.hidden = false;
-    warning.textContent = "Keeping 1080p at very small file sizes may produce visible compression artifacts.";
-  }
+  warning.hidden = true;
+  warning.textContent = "";
 });
 
 sizeInput.addEventListener("change", () => {
