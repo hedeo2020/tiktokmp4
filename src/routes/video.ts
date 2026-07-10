@@ -221,12 +221,54 @@ videoRouter.post("/jobs", async (req, res) => {
   }
 });
 
+videoRouter.post("/original-jobs", async (req, res) => {
+  try {
+    const url = validateTikTokUrl(req.body?.url);
+    const job: CompressionJob = {
+      id: crypto.randomUUID(),
+      status: "queued",
+      percent: 0,
+      message: "Starting original HD download",
+      subscribers: new Set()
+    };
+
+    compressionJobs.set(job.id, job);
+    res.status(202).json({ success: true, job: serializeJob(job) });
+
+    void runOriginalJob(job, url);
+  } catch (error) {
+    sendError(res, error);
+  }
+});
+
 videoRouter.get("/jobs/:jobId/events", (req, res) => {
   const job = compressionJobs.get(req.params.jobId);
   if (!job) {
     res.status(404).json({
       success: false,
       error: { code: "VIDEO_NOT_FOUND", message: "The compression job was not found." }
+    });
+    return;
+  }
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders?.();
+  job.subscribers.add(res);
+  emitJob(job);
+
+  req.on("close", () => {
+    job.subscribers.delete(res);
+  });
+});
+
+videoRouter.get("/original-jobs/:jobId/events", (req, res) => {
+  const job = compressionJobs.get(req.params.jobId);
+  if (!job) {
+    res.status(404).json({
+      success: false,
+      error: { code: "VIDEO_NOT_FOUND", message: "The original HD job was not found." }
     });
     return;
   }
@@ -263,6 +305,52 @@ videoRouter.get("/jobs/:jobId/download", async (req, res) => {
   if (job.cleanupTimer) clearTimeout(job.cleanupTimer);
   if (job.jobDirectory) await removeDirectoryQuietly(job.jobDirectory);
 });
+
+videoRouter.get("/original-jobs/:jobId/download", async (req, res) => {
+  const job = compressionJobs.get(req.params.jobId);
+  if (!job || job.status !== "done" || !job.outputPath || !job.filename) {
+    res.status(404).json({
+      success: false,
+      error: { code: "VIDEO_NOT_FOUND", message: "The original HD video is not ready." }
+    });
+    return;
+  }
+
+  const stat = await fsp.stat(job.outputPath);
+  res.setHeader("Content-Type", "video/mp4");
+  res.setHeader("Content-Disposition", `attachment; filename="${job.filename}"`);
+  res.setHeader("Content-Length", String(stat.size));
+  res.setHeader("Cache-Control", "no-store");
+  await streamMp4File(res, job.outputPath);
+  compressionJobs.delete(job.id);
+  if (job.cleanupTimer) clearTimeout(job.cleanupTimer);
+  if (job.jobDirectory) await removeDirectoryQuietly(job.jobDirectory);
+});
+
+async function runOriginalJob(job: CompressionJob, url: string): Promise<void> {
+  const controller = new AbortController();
+  try {
+    updateJob(job, 5, "Fetching metadata", "running");
+    const video = await fetchTikwmVideo(url, controller.signal);
+
+    job.jobDirectory = await createJobDirectory(config.tempDirectory);
+    const sourcePath = temporaryVideoPath(job.jobDirectory);
+
+    updateJob(job, 10, "Downloading original HD source");
+    await downloadVideo(video.hdplay, sourcePath, controller.signal, (downloadedBytes, totalBytes) => {
+      if (totalBytes && totalBytes > 0) {
+        updateJob(job, 10 + Math.min(downloadedBytes / totalBytes, 1) * 85, "Downloading original HD source");
+      }
+    });
+
+    job.outputPath = sourcePath;
+    job.filename = `tiktok-${sanitizeFilenamePart(video.id)}-original-hd.mp4`;
+    updateJob(job, 100, "Original HD download ready", "done");
+    scheduleJobCleanup(job);
+  } catch (error) {
+    failJob(job, error);
+  }
+}
 
 async function runCompressionJob(job: CompressionJob, url: string, mode: "adaptive" | "keep-1080p", sizePer20SecondsMb: number): Promise<void> {
   const controller = new AbortController();

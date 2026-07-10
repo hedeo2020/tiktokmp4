@@ -213,6 +213,14 @@ async function downloadBlobFromUrl(endpoint, fallbackFilename, failureMessage) {
   URL.revokeObjectURL(objectUrl);
 }
 
+function triggerDirectDownload(endpoint) {
+  const link = document.createElement("a");
+  link.href = endpoint;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
 async function startCompressionJob() {
   const payload = await fetch("/api/video/jobs", {
     method: "POST",
@@ -227,9 +235,21 @@ async function startCompressionJob() {
   return payload.job.id;
 }
 
-async function waitForCompressionJob(jobId) {
+async function startOriginalJob() {
+  const payload = await fetch("/api/video/original-jobs", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      url: analyzedUrl || urlInput.value
+    })
+  }).then(readJsonResponse);
+
+  return payload.job.id;
+}
+
+async function waitForJobProgress(eventsEndpoint, fallbackErrorMessage) {
   return await new Promise((resolve, reject) => {
-    const events = new EventSource(`/api/video/jobs/${encodeURIComponent(jobId)}/events`);
+    const events = new EventSource(eventsEndpoint);
 
     events.onmessage = (event) => {
       const job = JSON.parse(event.data);
@@ -242,13 +262,13 @@ async function waitForCompressionJob(jobId) {
 
       if (job.status === "error") {
         events.close();
-        reject(new Error(job.error?.message || "Compression failed."));
+        reject(new Error(job.error?.message || fallbackErrorMessage));
       }
     };
 
     events.onerror = () => {
       events.close();
-      reject(new Error("Lost connection to compression progress."));
+      reject(new Error("Lost connection to live progress."));
     };
   });
 }
@@ -258,17 +278,16 @@ originalButton.addEventListener("click", async () => {
   originalButton.disabled = true;
 
   try {
-    showStatus("Fetching original HD source");
-    startOriginalDownloadProgress();
-    await downloadBlobFromEndpoint(
-      "/api/video/original",
-      { url: analyzedUrl || urlInput.value },
-      "tiktok-original-hd.mp4",
+    showStatus("Starting Original HD download");
+    setProgress(1, "Starting Original HD download");
+    const jobId = await startOriginalJob();
+    await waitForJobProgress(
+      `/api/video/original-jobs/${encodeURIComponent(jobId)}/events`,
       "Original HD download failed."
     );
-    stopProgress();
-    setProgress(100, "Original HD download ready");
-    showStatus("Original HD download ready");
+    triggerDirectDownload(`/api/video/original-jobs/${encodeURIComponent(jobId)}/download`);
+    setProgress(100, "Browser download started");
+    showStatus("Browser download started");
   } catch (error) {
     stopProgress();
     showError(error.message);
@@ -285,14 +304,13 @@ downloadButton.addEventListener("click", async () => {
     showStatus("Starting compression job");
     setProgress(1, "Starting compression job");
     const jobId = await startCompressionJob();
-    await waitForCompressionJob(jobId);
-    await downloadBlobFromUrl(
-      `/api/video/jobs/${encodeURIComponent(jobId)}/download`,
-      "tiktok-compressed.mp4",
+    await waitForJobProgress(
+      `/api/video/jobs/${encodeURIComponent(jobId)}/events`,
       "Compression failed."
     );
-    setProgress(100, "Download ready");
-    showStatus("Download ready");
+    triggerDirectDownload(`/api/video/jobs/${encodeURIComponent(jobId)}/download`);
+    setProgress(100, "Browser download started");
+    showStatus("Browser download started");
   } catch (error) {
     showError(error.message);
   } finally {
