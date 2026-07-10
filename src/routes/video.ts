@@ -24,15 +24,50 @@ import {
 export const videoRouter = express.Router();
 
 let activeJobs = 0;
-
-function acquireJobSlot(): boolean {
-  if (activeJobs >= config.maxConcurrentJobs) return false;
-  activeJobs += 1;
-  return true;
+interface QueuedJob {
+  start: () => void;
+  reject: (error: AppError) => void;
 }
 
-function releaseJobSlot(): void {
+const queuedJobs: QueuedJob[] = [];
+
+async function acquireCompressionSlot(signal: AbortSignal): Promise<() => void> {
+  if (activeJobs < config.maxConcurrentJobs) {
+    activeJobs += 1;
+    return releaseCompressionSlot;
+  }
+
+  if (queuedJobs.length >= config.maxQueuedJobs) {
+    throw new AppError("SERVER_BUSY", "The server has too many videos waiting. Please try again soon.", 429);
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    let queuedJob: QueuedJob;
+    const removeFromQueue = () => {
+      const index = queuedJobs.indexOf(queuedJob);
+      if (index !== -1) queuedJobs.splice(index, 1);
+      reject(new AppError("JOB_TIMEOUT", "The video job was cancelled.", 499));
+    };
+
+    signal.addEventListener("abort", removeFromQueue, { once: true });
+    queuedJob = {
+      start: () => {
+        signal.removeEventListener("abort", removeFromQueue);
+        resolve();
+      },
+      reject
+    };
+    queuedJobs.push(queuedJob);
+  });
+
+  activeJobs += 1;
+  return releaseCompressionSlot;
+}
+
+function releaseCompressionSlot(): void {
   activeJobs = Math.max(0, activeJobs - 1);
+  const nextJob = queuedJobs.shift();
+  if (nextJob) nextJob.start();
 }
 
 async function streamMp4File(res: express.Response, filePath: string): Promise<void> {
@@ -72,11 +107,6 @@ videoRouter.post("/info", async (req, res) => {
 });
 
 videoRouter.post("/original", async (req, res) => {
-  if (!acquireJobSlot()) {
-    sendError(res, new AppError("SERVER_BUSY", "The server is busy. Please try again soon.", 429));
-    return;
-  }
-
   const controller = new AbortController();
   const abortIfDisconnected = () => {
     if (!res.writableEnded) controller.abort();
@@ -105,17 +135,11 @@ videoRouter.post("/original", async (req, res) => {
     sendError(res, error);
   } finally {
     res.off("close", abortIfDisconnected);
-    releaseJobSlot();
     if (jobDirectory) await removeDirectoryQuietly(jobDirectory);
   }
 });
 
 videoRouter.post("/download", async (req, res) => {
-  if (!acquireJobSlot()) {
-    sendError(res, new AppError("SERVER_BUSY", "The server is busy. Please try again soon.", 429));
-    return;
-  }
-
   const controller = new AbortController();
   const abortIfDisconnected = () => {
     if (!res.writableEnded) controller.abort();
@@ -123,7 +147,9 @@ videoRouter.post("/download", async (req, res) => {
   res.on("close", abortIfDisconnected);
 
   let jobDirectory: string | undefined;
+  let releaseSlot: (() => void) | undefined;
   try {
+    releaseSlot = await acquireCompressionSlot(controller.signal);
     const url = validateTikTokUrl(req.body?.url);
     const mode = validateCompressionMode(req.body?.mode);
     const sizePer20SecondsMb = validateSizePer20Seconds(req.body?.sizePer20SecondsMb);
@@ -155,7 +181,7 @@ videoRouter.post("/download", async (req, res) => {
     sendError(res, error);
   } finally {
     res.off("close", abortIfDisconnected);
-    releaseJobSlot();
+    releaseSlot?.();
     if (jobDirectory) await removeDirectoryQuietly(jobDirectory);
   }
 });

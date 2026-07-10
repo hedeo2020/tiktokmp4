@@ -15,6 +15,7 @@ export const config = {
   maxDurationSeconds: numberFromEnv("MAX_DURATION_SECONDS", 180),
   maxSourceSizeMb: numberFromEnv("MAX_SOURCE_SIZE_MB", 500),
   maxConcurrentJobs: numberFromEnv("MAX_CONCURRENT_JOBS", 1),
+  maxQueuedJobs: numberFromEnv("MAX_QUEUED_JOBS", 5),
   tempDirectory:
     process.env.TEMP_DIRECTORY ?? path.join(process.cwd(), "temp"),
   jobTimeoutSeconds: numberFromEnv("JOB_TIMEOUT_SECONDS", 600),
