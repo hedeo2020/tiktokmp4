@@ -96,7 +96,6 @@ form.addEventListener("submit", async (event) => {
   clearMessages();
   result.hidden = true;
   downloadButton.disabled = true;
-  downloadButton.hidden = true;
   originalButton.disabled = true;
   showStatus("Fetching metadata");
 
@@ -118,9 +117,8 @@ form.addEventListener("submit", async (event) => {
     warning.textContent = payload.video.warning || "";
     result.hidden = false;
     downloadButton.disabled = false;
-    downloadButton.hidden = false;
     originalButton.disabled = false;
-    showStatus("Ready to download");
+    showStatus("Ready to download or compress");
   } catch (error) {
     showError(error.message);
   }

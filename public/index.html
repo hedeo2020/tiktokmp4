@@ -20,29 +20,28 @@
             <input id="url" name="url" type="url" required placeholder="https://www.tiktok.com/@user/video/123" />
           </label>
 
-          <div class="grid" hidden>
+          <div class="grid">
             <label class="field">
               <span>Compression mode</span>
-              <select id="mode" name="mode">
-                <option value="adaptive">Best quality under target size</option>
-                <option value="keep-1080p">Keep up to 1080p</option>
+              <select id="mode" name="mode" aria-label="Compression mode">
+                <option value="keep-1080p" selected>Keep up to 1080p</option>
               </select>
             </label>
 
             <label class="field">
-              <span>Target size</span>
+              <span>Quality</span>
               <select id="size" name="size">
-                <option value="1">1 MB per 20 seconds</option>
-                <option value="2">2 MB per 20 seconds</option>
-                <option value="3">3 MB per 20 seconds</option>
+                <option value="1">Low</option>
+                <option value="2">Medium</option>
+                <option value="3">High</option>
               </select>
             </label>
           </div>
 
           <div class="actions">
             <button id="analyze" type="submit">Analyze</button>
-            <button id="download-original" class="secondary" type="button" disabled hidden>Download original HD</button>
-            <button id="download" type="button" disabled hidden>Download</button>
+            <button id="download-original" class="secondary" type="button" disabled>Download original HD</button>
+            <button id="download" type="button" disabled>Download and compress</button>
           </div>
         </form>
 
@@ -64,8 +63,8 @@
             <h2 id="title"></h2>
             <dl>
               <div><dt>Duration</dt><dd id="duration"></dd></div>
-              <div hidden><dt>Original HD size</dt><dd id="source-size"></dd></div>
-              <div><dt>Estimated compressed size</dt><dd id="estimated-size"></dd></div>
+              <div><dt>Original HD size</dt><dd id="source-size"></dd></div>
+              <div><dt>Compressed size</dt><dd id="estimated-size"></dd></div>
             </dl>
             <p id="warning" class="warning" hidden></p>
           </div>
