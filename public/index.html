@@ -20,7 +20,7 @@
             <input id="url" name="url" type="url" required placeholder="https://www.tiktok.com/@user/video/123" />
           </label>
 
-          <div class="grid">
+          <div class="grid" hidden>
             <label class="field">
               <span>Compression mode</span>
               <select id="mode" name="mode">
@@ -41,12 +41,21 @@
 
           <div class="actions">
             <button id="analyze" type="submit">Analyze</button>
-            <button id="download-original" class="secondary" type="button" disabled>Download original HD</button>
-            <button id="download" type="button" disabled>Download and compress</button>
+            <button id="download-original" class="secondary" type="button" disabled hidden>Download original HD</button>
+            <button id="download" type="button" disabled hidden>Download</button>
           </div>
         </form>
 
         <div id="status" class="status" hidden></div>
+        <div id="progress" class="progress" hidden>
+          <div class="progress-label">
+            <span id="progress-message">Preparing</span>
+            <strong id="progress-percent">0%</strong>
+          </div>
+          <div class="progress-track">
+            <div id="progress-bar" class="progress-bar"></div>
+          </div>
+        </div>
         <div id="error" class="error" hidden></div>
 
         <section id="result" class="result" hidden>
@@ -55,7 +64,7 @@
             <h2 id="title"></h2>
             <dl>
               <div><dt>Duration</dt><dd id="duration"></dd></div>
-              <div><dt>Original HD size</dt><dd id="source-size"></dd></div>
+              <div hidden><dt>Original HD size</dt><dd id="source-size"></dd></div>
               <div><dt>Estimated compressed size</dt><dd id="estimated-size"></dd></div>
             </dl>
             <p id="warning" class="warning" hidden></p>

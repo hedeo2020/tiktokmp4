@@ -8,8 +8,13 @@ const result = document.querySelector("#result");
 const statusBox = document.querySelector("#status");
 const errorBox = document.querySelector("#error");
 const warning = document.querySelector("#warning");
+const progressBox = document.querySelector("#progress");
+const progressMessage = document.querySelector("#progress-message");
+const progressPercent = document.querySelector("#progress-percent");
+const progressBar = document.querySelector("#progress-bar");
 
 let analyzedUrl = "";
+let progressTimer = null;
 
 function showStatus(message) {
   statusBox.textContent = message;
@@ -24,8 +29,46 @@ function showError(message) {
 function clearMessages() {
   statusBox.hidden = true;
   errorBox.hidden = true;
+  progressBox.hidden = true;
   statusBox.textContent = "";
   errorBox.textContent = "";
+  stopProgress();
+}
+
+function setProgress(percent, message) {
+  const safePercent = Math.max(0, Math.min(100, Math.round(percent)));
+  progressBox.hidden = false;
+  progressMessage.textContent = message;
+  progressPercent.textContent = `${safePercent}%`;
+  progressBar.style.width = `${safePercent}%`;
+}
+
+function startProcessingProgress() {
+  stopProgress();
+  let percent = 8;
+  setProgress(percent, "Preparing video");
+  progressTimer = window.setInterval(() => {
+    if (percent < 35) {
+      percent += 3;
+      setProgress(percent, "Downloading HD source");
+      return;
+    }
+
+    if (percent < 92) {
+      percent += 1;
+      setProgress(percent, "Compressing video");
+      return;
+    }
+
+    setProgress(percent, "Finalizing download");
+  }, 900);
+}
+
+function stopProgress() {
+  if (progressTimer) {
+    window.clearInterval(progressTimer);
+    progressTimer = null;
+  }
 }
 
 function formatBytes(bytes) {
@@ -53,6 +96,7 @@ form.addEventListener("submit", async (event) => {
   clearMessages();
   result.hidden = true;
   downloadButton.disabled = true;
+  downloadButton.hidden = true;
   originalButton.disabled = true;
   showStatus("Fetching metadata");
 
@@ -74,8 +118,9 @@ form.addEventListener("submit", async (event) => {
     warning.textContent = payload.video.warning || "";
     result.hidden = false;
     downloadButton.disabled = false;
+    downloadButton.hidden = false;
     originalButton.disabled = false;
-    showStatus("Ready to compress");
+    showStatus("Ready to download");
   } catch (error) {
     showError(error.message);
   }
@@ -139,11 +184,8 @@ downloadButton.addEventListener("click", async () => {
   downloadButton.disabled = true;
 
   try {
-    showStatus("Fetching metadata");
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    showStatus("Downloading HD source");
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    showStatus("Compressing video");
+    showStatus("Processing your compressed download");
+    startProcessingProgress();
 
     await downloadBlobFromEndpoint(
       "/api/video/download",
@@ -155,8 +197,11 @@ downloadButton.addEventListener("click", async () => {
       "tiktok-compressed.mp4",
       "Compression failed."
     );
+    stopProgress();
+    setProgress(100, "Download ready");
     showStatus("Download ready");
   } catch (error) {
+    stopProgress();
     showError(error.message);
   } finally {
     downloadButton.disabled = false;
